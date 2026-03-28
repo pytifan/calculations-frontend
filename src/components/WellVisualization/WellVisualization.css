@@ -1,0 +1,73 @@
+/* ── BUBBLE RISE ──────────────────────────────────────────── */
+@keyframes bubbleRise {
+  0%   { transform: translateY(0)     scale(1);   opacity: 0.3; }
+  40%  { transform: translateY(-60px) scale(1.2); opacity: 0.4; }
+  80%  { transform: translateY(-130px) scale(0.9); opacity: 0.15; }
+  100% { transform: translateY(-180px) scale(1);   opacity: 0; }
+}
+
+.bubble   { animation: bubbleRise linear infinite; }
+.bubble-1 { animation-duration: 2.8s; animation-delay: 0s; }
+.bubble-2 { animation-duration: 3.5s; animation-delay: 0.7s; }
+.bubble-3 { animation-duration: 2.3s; animation-delay: 1.3s; }
+.bubble-4 { animation-duration: 4.0s; animation-delay: 0.3s; }
+.bubble-5 { animation-duration: 3.1s; animation-delay: 1.9s; }
+
+/* ── SURFACE SHIMMER ──────────────────────────────────────── */
+@keyframes shimmerSweep {
+  0%, 100% { opacity: 0.15; transform: scaleX(0.7); }
+  50%       { opacity: 0.55; transform: scaleX(1.0); }
+}
+
+.surface-shimmer {
+  animation: shimmerSweep 2s ease-in-out infinite;
+  transform-origin: center;
+  will-change: transform, opacity;
+}
+
+/* ── FLUID FILL (progress mode) ───────────────────────────── */
+.fluid-fill-rect {
+  will-change: transform;
+  transform-box: fill-box;
+  transform-origin: bottom;
+}
+
+/* ── STACKED BAND ENTRY (result mode) ─────────────────────── */
+@keyframes bandSlideIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.fluid-band {
+  animation: bandSlideIn 0.5s ease-out forwards;
+  will-change: opacity;
+}
+
+/* ── PERCENTAGE LABEL PULSE ───────────────────────────────── */
+@keyframes labelPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+
+.pct-label {
+  animation: labelPulse 2s ease-in-out infinite;
+}
+
+/* ── STOP ANIMATIONS IN DONE STATE ───────────────────────── */
+.well-svg[data-status="done"] .bubble,
+.well-svg[data-status="done"] .surface-shimmer,
+.well-svg[data-status="done"] .pct-label {
+  animation: none;
+}
+
+/* ── ERROR PULSE ──────────────────────────────────────────── */
+@keyframes errorPulse {
+  0%, 100% { opacity: 0.3; }
+  50%       { opacity: 1; }
+}
+
+.well-svg[data-status="error"] .casing-left,
+.well-svg[data-status="error"] .casing-right {
+  animation: errorPulse 1.2s ease-in-out infinite;
+  fill: #7f1d1d;
+}
