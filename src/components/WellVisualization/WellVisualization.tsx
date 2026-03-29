@@ -1,253 +1,371 @@
 import './WellVisualization.css'
-import { getFluidColor, getFluidColorLight, FLUID_COLORS, FLUID_LABELS } from './fluidColors'
+import { FLUID_COLORS, FLUID_LABELS } from './fluidColors'
 import type { CalcStatus, FluidType, VolumeRequirement } from '../../types/calculation'
 
 interface Props {
   percentage: number
-  currentFluidType: FluidType | null
   phase: string | null
   volumes: VolumeRequirement[] | null
   status: CalcStatus
+  // Well-completion progress fields (present during streaming)
+  annulusFrontM?: number
+  tubingFrontM?: number
+  tubingLengthM?: number
+  wellheadPressurePa?: number
+  bottomPressurePa?: number
+  volumePumpedM3?: number
+  // Legacy single-fluid props (generic solver)
+  currentFluidType?: FluidType | null
 }
 
-// SVG coordinate constants
-const TUBE_TOP_Y    = 28
-const TUBE_HEIGHT   = 344
-const TUBE_BOTTOM_Y = TUBE_TOP_Y + TUBE_HEIGHT  // 372
-const INNER_X       = 28
-const INNER_W       = 64
+// SVG layout constants
+const WELL_TOP_Y    = 28
+const WELL_HEIGHT   = 344
+const WELL_BOTTOM_Y = WELL_TOP_Y + WELL_HEIGHT  // 372
+const SVG_W         = 140
 
-function computeStackedBands(volumes: VolumeRequirement[]) {
-  const total = volumes.reduce((s, v) => s + v.volumeM3, 0)
-  if (total === 0) return []
-  let offsetFraction = 0
-  return volumes.map((vol) => {
-    const frac = vol.volumeM3 / total
-    const y = TUBE_TOP_Y + (1 - offsetFraction - frac) * TUBE_HEIGHT
-    const height = frac * TUBE_HEIGHT
-    offsetFraction += frac
-    return { fluidType: vol.fluidType, y, height }
-  })
+// Two columns inside the wellbore
+// Tubing is the inner pipe, annulus is the space between tubing and casing
+const CASING_LEFT   = 14
+const CASING_RIGHT  = SVG_W - 14
+
+// Annulus occupies most of the inner bore
+const ANN_LEFT      = 30    // inner edge of casing on left
+const ANN_RIGHT     = 76    // outer wall of tubing on right side of annulus
+
+// Tubing inner bore
+const TUB_LEFT      = 80    // left inner wall of tubing
+const TUB_RIGHT     = 108   // right inner wall of tubing
+
+const WALL_COLOR    = '#546E7A'
+const OLD_FLUID_CLR = '#37474F'  // dark grey: original brine/water
+const NEW_FLUID_CLR = '#1565C0'  // blue: completion fluid
+const EMPTY_CLR     = '#0f172a'  // near black: evacuated zone
+
+/**
+ * Convert a depth fraction [0,1] to SVG Y coordinate (0=surface, 1=bottom).
+ */
+function depthToY(frac: number) {
+  return WELL_TOP_Y + frac * WELL_HEIGHT
 }
 
-export default function WellVisualization({ percentage, currentFluidType, phase, volumes, status }: Props) {
-  const fluidColor      = getFluidColor(currentFluidType)
-  const fluidColorLight = getFluidColorLight(currentFluidType)
-  const fillScale       = Math.min(percentage, 100) / 100
-  const bands           = volumes ? computeStackedBands(volumes) : []
+function WellCompletionView({
+  annulusFrontFrac,
+  tubingFrontFrac,
+  status,
+  percentage,
+}: {
+  annulusFrontFrac: number   // 0 = surface, 1 = bottom — new fluid in annulus down to here
+  tubingFrontFrac: number    // 0 = top — old fluid starts here in tubing (above = evacuated)
+  status: CalcStatus
+  percentage: number
+}) {
+  const annFrontY = depthToY(annulusFrontFrac)
+  const tubFrontY = depthToY(tubingFrontFrac)
 
-  // Surface shimmer Y position (top of the fill)
-  const fillHeight = fillScale * TUBE_HEIGHT
-  const fillTopY   = TUBE_BOTTOM_Y - fillHeight
+  return (
+    <svg viewBox={`0 0 ${SVG_W} 420`} className="well-svg w-36 h-auto" aria-label="Well bore">
+      <defs>
+        <linearGradient id="casingGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%"   stopColor="#546E7A" />
+          <stop offset="30%"  stopColor="#B0BEC5" />
+          <stop offset="50%"  stopColor="#ECEFF1" />
+          <stop offset="70%"  stopColor="#B0BEC5" />
+          <stop offset="100%" stopColor="#546E7A" />
+        </linearGradient>
+        <linearGradient id="newFluidGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%"   stopColor={NEW_FLUID_CLR} />
+          <stop offset="50%"  stopColor="#1976D2" />
+          <stop offset="100%" stopColor={NEW_FLUID_CLR} />
+        </linearGradient>
+        <clipPath id="annClip">
+          <rect x={ANN_LEFT} y={WELL_TOP_Y} width={ANN_RIGHT - ANN_LEFT} height={WELL_HEIGHT} />
+        </clipPath>
+        <clipPath id="tubClip">
+          <rect x={TUB_LEFT} y={WELL_TOP_Y} width={TUB_RIGHT - TUB_LEFT} height={WELL_HEIGHT} />
+        </clipPath>
+      </defs>
 
-  const shimmerGradId = `shimmer-${currentFluidType ?? 'default'}`
+      {/* Earth background */}
+      <rect x="0" y="0" width={SVG_W} height="420" fill="#2C1810" />
+      {[80, 170, 260, 340].map((y, i) => (
+        <rect key={i} x="0" y={y} width={CASING_LEFT} height="6" fill="#3E2723" opacity="0.6" />
+      ))}
+      {[80, 170, 260, 340].map((y, i) => (
+        <rect key={i} x={CASING_RIGHT} y={y} width={SVG_W - CASING_RIGHT} height="6" fill="#3E2723" opacity="0.6" />
+      ))}
+
+      {/* Casing walls */}
+      <rect x={CASING_LEFT}      y="20" width={ANN_LEFT - CASING_LEFT} height="380" fill="url(#casingGrad)" />
+      <rect x={CASING_RIGHT - (ANN_LEFT - CASING_LEFT)} y="20"
+            width={ANN_LEFT - CASING_LEFT} height="380" fill="url(#casingGrad)" />
+
+      {/* Tubing walls */}
+      <rect x={ANN_RIGHT}  y="20" width={TUB_LEFT - ANN_RIGHT}  height="380" fill={WALL_COLOR} opacity="0.9" />
+      <rect x={TUB_RIGHT}  y="20" width={SVG_W - TUB_RIGHT - (SVG_W - CASING_RIGHT)}
+            height="380" fill={WALL_COLOR} opacity="0.9" />
+
+      {/* Wellhead fittings */}
+      <rect x={CASING_LEFT - 4} y="12" width={CASING_RIGHT - CASING_LEFT + 8} height="10"
+            fill="url(#casingGrad)" rx="2" />
+      <rect x="56" y="4" width="28" height="10" fill="#78909C" rx="2" />
+
+      {/* Bottom cap */}
+      <rect x={CASING_LEFT} y="396" width={CASING_RIGHT - CASING_LEFT} height="12"
+            fill="url(#casingGrad)" rx="4" />
+
+      {/* ── ANNULUS FLUID ── */}
+      <g clipPath="url(#annClip)">
+        {/* New fluid (top section, descends from surface) */}
+        <rect x={ANN_LEFT} y={WELL_TOP_Y} width={ANN_RIGHT - ANN_LEFT}
+              height={Math.max(0, annFrontY - WELL_TOP_Y)}
+              fill="url(#newFluidGrad)" />
+        {/* Old fluid (below new fluid front) */}
+        <rect x={ANN_LEFT} y={annFrontY} width={ANN_RIGHT - ANN_LEFT}
+              height={Math.max(0, WELL_BOTTOM_Y - annFrontY)}
+              fill={OLD_FLUID_CLR} />
+        {/* Annulus front shimmer line */}
+        {annulusFrontFrac > 0 && annulusFrontFrac < 1 && (
+          <rect x={ANN_LEFT} y={annFrontY - 1} width={ANN_RIGHT - ANN_LEFT} height="2"
+                fill="white" fillOpacity="0.4" />
+        )}
+      </g>
+
+      {/* ── TUBING FLUID ── */}
+      <g clipPath="url(#tubClip)">
+        {/* Evacuated zone (top, grows as old fluid exits) */}
+        <rect x={TUB_LEFT} y={WELL_TOP_Y} width={TUB_RIGHT - TUB_LEFT}
+              height={Math.max(0, tubFrontY - WELL_TOP_Y)}
+              fill={EMPTY_CLR} />
+        {/* Old fluid (below evacuated zone) */}
+        <rect x={TUB_LEFT} y={tubFrontY} width={TUB_RIGHT - TUB_LEFT}
+              height={Math.max(0, WELL_BOTTOM_Y - tubFrontY)}
+              fill={OLD_FLUID_CLR} />
+        {/* Tubing front shimmer */}
+        {tubingFrontFrac > 0 && tubingFrontFrac < 1 && (
+          <rect x={TUB_LEFT} y={tubFrontY - 1} width={TUB_RIGHT - TUB_LEFT} height="2"
+                fill="white" fillOpacity="0.35" />
+        )}
+      </g>
+
+      {/* Depth ticks */}
+      <g stroke="#546E7A" strokeWidth="0.8" opacity="0.5">
+        {[25, 50, 75].map((pct) => {
+          const y = depthToY(pct / 100)
+          return (
+            <g key={pct}>
+              <line x1={CASING_LEFT} y1={y} x2={ANN_LEFT} y2={y} />
+              <line x1={CASING_RIGHT - (ANN_LEFT - CASING_LEFT)} y1={y} x2={CASING_RIGHT} y2={y} />
+            </g>
+          )
+        })}
+      </g>
+
+      {/* Column labels */}
+      <text x={(ANN_LEFT + ANN_RIGHT) / 2} y={WELL_TOP_Y - 4}
+            textAnchor="middle" fill="#78909C" fontSize="7" fontFamily="monospace">ANN</text>
+      <text x={(TUB_LEFT + TUB_RIGHT) / 2} y={WELL_TOP_Y - 4}
+            textAnchor="middle" fill="#78909C" fontSize="7" fontFamily="monospace">TUB</text>
+
+      {/* Percentage label */}
+      {status === 'streaming' && percentage > 0 && (
+        <text x={SVG_W / 2} y="16" textAnchor="middle"
+              fill="white" fontSize="9" fontFamily="monospace" fontWeight="bold">
+          {percentage}%
+        </text>
+      )}
+      {status === 'done' && (
+        <text x={SVG_W / 2} y="16" textAnchor="middle"
+              fill="#4ade80" fontSize="9" fontFamily="monospace" fontWeight="bold">
+          DONE
+        </text>
+      )}
+    </svg>
+  )
+}
+
+function SingleBoreView({
+  percentage,
+  currentFluidType,
+  volumes,
+  status,
+}: {
+  percentage: number
+  currentFluidType: FluidType | null | undefined
+  volumes: VolumeRequirement[] | null
+  status: CalcStatus
+}) {
+  const fluidColor = FLUID_COLORS[currentFluidType ?? ''] ?? '#37474F'
+  const fillScale  = Math.min(percentage, 100) / 100
+  const INNER_X    = 28
+  const INNER_W    = 64
+  const fillHeight = fillScale * WELL_HEIGHT
+  const fillTopY   = WELL_BOTTOM_Y - fillHeight
+
+  return (
+    <svg viewBox="0 0 120 420" className="well-svg w-28 h-auto" aria-label="Well bore">
+      <defs>
+        <linearGradient id="casingGrad2" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%"   stopColor="#546E7A" />
+          <stop offset="50%"  stopColor="#ECEFF1" />
+          <stop offset="100%" stopColor="#546E7A" />
+        </linearGradient>
+        <clipPath id="wellClip2">
+          <rect x={INNER_X} y={WELL_TOP_Y} width={INNER_W} height={WELL_HEIGHT} />
+        </clipPath>
+      </defs>
+      <rect x="0" y="0" width="120" height="420" fill="#2C1810" />
+      <rect x="18" y="20" width="12" height="380" fill="url(#casingGrad2)" />
+      <rect x="90" y="20" width="12" height="380" fill="url(#casingGrad2)" />
+      <rect x="14" y="12" width="92" height="12" fill="url(#casingGrad2)" rx="2" />
+      <rect x="48" y="0"  width="24" height="10" fill="#78909C" rx="2" />
+      <rect x="18" y="396" width="84" height="12" fill="url(#casingGrad2)" rx="4" />
+      <rect x={INNER_X} y={WELL_TOP_Y} width={INNER_W} height={WELL_HEIGHT} fill="#0f172a" />
+      <g clipPath="url(#wellClip2)">
+        {!volumes && (
+          <rect x={INNER_X} y={WELL_TOP_Y} width={INNER_W} height={WELL_HEIGHT}
+                fill={fluidColor}
+                style={{
+                  transform: `scaleY(${fillScale})`,
+                  transformBox: 'fill-box',
+                  transformOrigin: 'bottom',
+                  transition: 'transform 0.8s cubic-bezier(0.4,0,0.2,1)',
+                }} />
+        )}
+        {volumes && volumes.map((v, i) => {
+          const total = volumes.reduce((s, x) => s + x.volumeM3, 0)
+          const frac = v.volumeM3 / (total || 1)
+          const offset = volumes.slice(0, i).reduce((s, x) => s + x.volumeM3 / (total || 1), 0)
+          const y = WELL_TOP_Y + (1 - offset - frac) * WELL_HEIGHT
+          return (
+            <rect key={v.fluidType} x={INNER_X} y={y} width={INNER_W}
+                  height={frac * WELL_HEIGHT}
+                  fill={FLUID_COLORS[v.fluidType] ?? '#37474F'} />
+          )
+        })}
+      </g>
+      {status === 'streaming' && percentage > 0 && (
+        <text x="60" y={Math.max(fillTopY - 4, 42)} textAnchor="middle"
+              fill="white" fontSize="10" fontFamily="monospace" fontWeight="bold">
+          {percentage}%
+        </text>
+      )}
+      {status === 'done' && (
+        <text x="60" y="42" textAnchor="middle"
+              fill="#4ade80" fontSize="9" fontFamily="monospace" fontWeight="bold">
+          COMPLETE
+        </text>
+      )}
+    </svg>
+  )
+}
+
+export default function WellVisualization({
+  percentage,
+  phase,
+  volumes,
+  status,
+  annulusFrontM,
+  tubingFrontM,
+  tubingLengthM,
+  wellheadPressurePa,
+  bottomPressurePa,
+  volumePumpedM3,
+  currentFluidType,
+}: Props) {
+  const isWellMode = annulusFrontM !== undefined && tubingLengthM !== undefined && tubingLengthM > 0
+  const L = tubingLengthM ?? 1
 
   return (
     <div className="flex flex-col items-center gap-3 w-full">
-      <svg
-        viewBox="0 0 120 420"
-        className="well-svg w-28 h-auto"
-        data-status={status}
-        aria-label="Well bore visualization"
-      >
-        <defs>
-          {/* Metallic casing gradient */}
-          <linearGradient id="casingGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%"   stopColor="#546E7A" />
-            <stop offset="20%"  stopColor="#B0BEC5" />
-            <stop offset="50%"  stopColor="#ECEFF1" />
-            <stop offset="80%"  stopColor="#B0BEC5" />
-            <stop offset="100%" stopColor="#546E7A" />
-          </linearGradient>
+      {isWellMode ? (
+        <WellCompletionView
+          annulusFrontFrac={Math.min((annulusFrontM ?? 0) / L, 1)}
+          tubingFrontFrac={Math.min((tubingFrontM ?? 0) / L, 1)}
+          status={status}
+          percentage={percentage}
+        />
+      ) : (
+        <SingleBoreView
+          percentage={percentage}
+          currentFluidType={currentFluidType}
+          volumes={volumes}
+          status={status}
+        />
+      )}
 
-          {/* Active fluid shimmer */}
-          <linearGradient id={shimmerGradId} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%"   stopColor={fluidColor}      stopOpacity="1" />
-            <stop offset="40%"  stopColor={fluidColorLight}  stopOpacity="0.9" />
-            <stop offset="60%"  stopColor={fluidColorLight}  stopOpacity="0.9" />
-            <stop offset="100%" stopColor={fluidColor}       stopOpacity="1" />
-          </linearGradient>
-
-          {/* Surface shimmer overlay */}
-          <linearGradient id="surfaceShimmer" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%"   stopColor="white" stopOpacity="0" />
-            <stop offset="50%"  stopColor="white" stopOpacity="0.4" />
-            <stop offset="100%" stopColor="white" stopOpacity="0" />
-          </linearGradient>
-
-          {/* Clip to inner bore */}
-          <clipPath id="wellClip">
-            <rect x={INNER_X} y={TUBE_TOP_Y} width={INNER_W} height={TUBE_HEIGHT} />
-          </clipPath>
-        </defs>
-
-        {/* ── EARTH FORMATION BACKGROUND ── */}
-        <rect x="0" y="0" width="120" height="420" fill="#2C1810" />
-        {/* Formation texture stripes */}
-        <rect x="0"   y="80"  width="22" height="6"  fill="#3E2723" opacity="0.7" />
-        <rect x="98"  y="80"  width="22" height="6"  fill="#3E2723" opacity="0.7" />
-        <rect x="0"   y="170" width="22" height="5"  fill="#BF360C" opacity="0.25" />
-        <rect x="98"  y="170" width="22" height="5"  fill="#BF360C" opacity="0.25" />
-        <rect x="0"   y="260" width="22" height="8"  fill="#3E2723" opacity="0.5" />
-        <rect x="98"  y="260" width="22" height="8"  fill="#3E2723" opacity="0.5" />
-        <rect x="0"   y="340" width="22" height="6"  fill="#4E342E" opacity="0.4" />
-        <rect x="98"  y="340" width="22" height="6"  fill="#4E342E" opacity="0.4" />
-
-        {/* ── CASING WALLS ── */}
-        <rect className="casing-left"  x="18" y="20" width="12" height="380" fill="url(#casingGrad)" />
-        <rect className="casing-right" x="90" y="20" width="12" height="380" fill="url(#casingGrad)" />
-
-        {/* ── WELLHEAD FITTINGS ── */}
-        <rect x="14" y="12" width="92" height="12" fill="url(#casingGrad)" rx="2" />
-        <rect x="20" y="6"  width="80" height="10" fill="#90A4AE"           rx="2" />
-        <rect x="48" y="0"  width="24" height="10" fill="#78909C"           rx="2" />
-
-        {/* ── BOTTOM CAP ── */}
-        <rect x="18" y="396" width="84" height="12" fill="url(#casingGrad)" rx="4" />
-
-        {/* ── INNER BORE (dark empty) ── */}
-        <rect x={INNER_X} y={TUBE_TOP_Y} width={INNER_W} height={TUBE_HEIGHT} fill="#0f172a" />
-
-        {/* ── FLUID CONTENT (clipped) ── */}
-        <g clipPath="url(#wellClip)">
-
-          {/* PROGRESS MODE: single rising fill (scaleY from bottom, GPU composited) */}
-          {!volumes && (
-            <rect
-              className="fluid-fill-rect"
-              x={INNER_X}
-              y={TUBE_TOP_Y}
-              width={INNER_W}
-              height={TUBE_HEIGHT}
-              fill={`url(#${shimmerGradId})`}
-              style={{
-                transform: `scaleY(${fillScale})`,
-                transformBox: 'fill-box',
-                transformOrigin: 'bottom',
-                transition: 'transform 0.8s cubic-bezier(0.4, 0, 0.2, 1)',
-              }}
-            />
+      {/* Pressure readout (well completion mode only) */}
+      {isWellMode && (wellheadPressurePa !== undefined || bottomPressurePa !== undefined) && (
+        <div className="w-full grid grid-cols-2 gap-1 text-xs font-mono">
+          {wellheadPressurePa !== undefined && (
+            <div className="bg-gray-900 border border-gray-700 rounded px-2 py-1">
+              <span className="text-gray-500">Pu</span>{' '}
+              <span className="text-amber-400">{(wellheadPressurePa / 1e5).toFixed(1)} bar</span>
+            </div>
           )}
+          {bottomPressurePa !== undefined && (
+            <div className="bg-gray-900 border border-gray-700 rounded px-2 py-1">
+              <span className="text-gray-500">Pb</span>{' '}
+              <span className="text-cyan-400">{(bottomPressurePa / 1e5).toFixed(1)} bar</span>
+            </div>
+          )}
+          {volumePumpedM3 !== undefined && (
+            <div className="bg-gray-900 border border-gray-700 rounded px-2 py-1 col-span-2">
+              <span className="text-gray-500">Q</span>{' '}
+              <span className="text-green-400">{volumePumpedM3.toFixed(1)} m³</span>
+            </div>
+          )}
+        </div>
+      )}
 
-          {/* RESULT MODE: stacked bands */}
-          {volumes && bands.map((band, i) => (
-            <rect
-              key={band.fluidType}
-              className="fluid-band"
-              x={INNER_X}
-              y={band.y}
-              width={INNER_W}
-              height={band.height}
-              fill={getFluidColor(band.fluidType)}
-              style={{ animationDelay: `${i * 0.08}s` }}
-            />
+      {/* Fluid legend (well completion result) */}
+      {isWellMode && volumes && (
+        <div className="w-full space-y-1 text-xs px-1">
+          {volumes.map((v) => (
+            <div key={v.fluidType} className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-sm flex-shrink-0"
+                   style={{ backgroundColor: FLUID_COLORS[v.fluidType] ?? '#37474F' }} />
+              <span className="text-gray-300 truncate">
+                {FLUID_LABELS[v.fluidType] ?? v.fluidType.replace(/_/g, ' ')}
+              </span>
+              <span className="text-gray-500 ml-auto">{v.volumeM3.toFixed(1)} m³</span>
+            </div>
           ))}
+        </div>
+      )}
 
-          {/* BUBBLES (only during streaming) */}
-          {status === 'streaming' && !volumes && fillScale > 0.05 && (
-            <g
-              className="bubbles"
-              style={{
-                transform: `translateY(${fillTopY + fillHeight * 0.6}px)`,
-              }}
-            >
-              <circle className="bubble bubble-1" cx="38" r="2.5" cy="0" fill="white" fillOpacity="0.25" />
-              <circle className="bubble bubble-2" cx="52" r="1.8" cy="0" fill="white" fillOpacity="0.2" />
-              <circle className="bubble bubble-3" cx="66" r="2.2" cy="0" fill="white" fillOpacity="0.22" />
-              <circle className="bubble bubble-4" cx="45" r="1.5" cy="0" fill="white" fillOpacity="0.18" />
-              <circle className="bubble bubble-5" cx="78" r="2.0" cy="0" fill="white" fillOpacity="0.2" />
-            </g>
-          )}
+      {/* Generic fluid legend */}
+      {!isWellMode && volumes && (
+        <div className="w-full space-y-1.5 text-xs px-1">
+          {volumes.map((v) => (
+            <div key={v.fluidType} className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-sm flex-shrink-0"
+                   style={{ backgroundColor: FLUID_COLORS[v.fluidType] ?? '#37474F' }} />
+              <span className="text-gray-300 truncate">{FLUID_LABELS[v.fluidType] ?? v.fluidType}</span>
+              <span className="text-gray-500 ml-auto font-mono">{v.volumeM3.toFixed(1)} m³</span>
+            </div>
+          ))}
+        </div>
+      )}
 
-          {/* SURFACE SHIMMER (progress mode only) */}
-          {!volumes && fillScale > 0 && (
-            <rect
-              className="surface-shimmer"
-              x={INNER_X}
-              y={fillTopY - 4}
-              width={INNER_W}
-              height={8}
-              fill="url(#surfaceShimmer)"
-            />
-          )}
+      {/* Legend: annulus / tubing colors */}
+      {isWellMode && status === 'streaming' && (
+        <div className="w-full space-y-1 text-xs px-1">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: NEW_FLUID_CLR }} />
+            <span className="text-gray-300">Completion fluid (new)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: OLD_FLUID_CLR }} />
+            <span className="text-gray-300">Formation brine (old)</span>
+          </div>
+        </div>
+      )}
 
-        </g>
-
-        {/* ── DEPTH TICKS ── */}
-        <g stroke="#546E7A" strokeWidth="0.8" opacity="0.6">
-          {[25, 50, 75].map((pct) => {
-            const tickY = TUBE_TOP_Y + (pct / 100) * TUBE_HEIGHT
-            return (
-              <g key={pct}>
-                <line x1="18" y1={tickY} x2="24" y2={tickY} />
-                <line x1="96" y1={tickY} x2="102" y2={tickY} />
-              </g>
-            )
-          })}
-        </g>
-
-        {/* ── PERCENTAGE LABEL ── */}
-        {status === 'streaming' && fillScale > 0 && (
-          <text
-            className="pct-label"
-            x="60"
-            y={Math.max(fillTopY - 6, 44)}
-            textAnchor="middle"
-            fill="white"
-            fontSize="10"
-            fontFamily="monospace"
-            fontWeight="bold"
-          >
-            {percentage}%
-          </text>
-        )}
-
-        {/* ── DONE LABEL ── */}
-        {status === 'done' && (
-          <text
-            x="60"
-            y="42"
-            textAnchor="middle"
-            fill="#4ade80"
-            fontSize="9"
-            fontFamily="monospace"
-            fontWeight="bold"
-          >
-            COMPLETE
-          </text>
-        )}
-      </svg>
-
-      {/* ── FLUID LEGEND ── */}
-      <div className="w-full space-y-1.5 text-xs px-1">
-        {volumes
-          ? volumes.map((v) => (
-              <div key={v.fluidType} className="flex items-center gap-2">
-                <div
-                  className="w-3 h-3 rounded-sm flex-shrink-0"
-                  style={{ backgroundColor: FLUID_COLORS[v.fluidType] ?? '#37474F' }}
-                />
-                <span className="text-gray-300 truncate">{FLUID_LABELS[v.fluidType] ?? v.fluidType}</span>
-                <span className="text-gray-500 ml-auto font-mono">{v.volumeM3.toFixed(1)}m³</span>
-              </div>
-            ))
-          : currentFluidType && (
-              <div className="flex items-center gap-2">
-                <div
-                  className="w-3 h-3 rounded-sm flex-shrink-0 animate-pulse"
-                  style={{ backgroundColor: FLUID_COLORS[currentFluidType] ?? '#37474F' }}
-                />
-                <span className="text-gray-300 truncate">{FLUID_LABELS[currentFluidType] ?? currentFluidType}</span>
-              </div>
-            )}
-      </div>
-
-      {/* ── PHASE INDICATOR ── */}
+      {/* Phase indicator */}
       {phase && status === 'streaming' && (
         <div className="w-full text-center">
-          <span className="text-xs text-amber-400 font-mono">
-            {phase.replace(/_/g, ' ')}
-          </span>
+          <span className="text-xs text-amber-400 font-mono">{phase.replace(/_/g, ' ')}</span>
         </div>
       )}
     </div>

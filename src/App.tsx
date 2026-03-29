@@ -16,8 +16,6 @@ export default function App() {
     fetchServiceInfo().then(setServiceInfo).catch(() => {})
   }, [])
 
-  const maxEquations = serviceInfo?.limits.maxEquationsPerRequest ?? 50
-
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 flex flex-col">
       {/* ── NAV ── */}
@@ -53,11 +51,6 @@ export default function App() {
             <span key={f} className="bg-gray-800 text-gray-400 rounded px-2 py-0.5 font-mono">{f}</span>
           ))}
           <span className="text-gray-700 ml-2">|</span>
-          <span className="text-gray-600">Solvers:</span>
-          {serviceInfo.solverMethods.map((s) => (
-            <span key={s} className="bg-gray-800 text-gray-400 rounded px-2 py-0.5 font-mono">{s}</span>
-          ))}
-          <span className="text-gray-700 ml-2">|</span>
           <span>Max {serviceInfo.limits.maxConcurrentCalculations} concurrent · {serviceInfo.limits.calculationTimeoutSeconds}s timeout</span>
         </div>
       )}
@@ -76,6 +69,12 @@ export default function App() {
             phase={calc.phase}
             volumes={calc.volumes}
             status={calc.status}
+            annulusFrontM={calc.annulusFrontM}
+            tubingFrontM={calc.tubingFrontM}
+            tubingLengthM={calc.tubingLengthM}
+            wellheadPressurePa={calc.wellheadPressurePa}
+            bottomPressurePa={calc.bottomPressurePa}
+            volumePumpedM3={calc.volumePumpedM3}
           />
         </aside>
 
@@ -87,7 +86,6 @@ export default function App() {
               <CalculationForm
                 onSubmit={calc.start}
                 disabled={calc.status === 'submitting'}
-                maxEquations={maxEquations}
               />
             )}
 

@@ -1,9 +1,11 @@
 export const FLUID_COLORS: Record<string, string> = {
-  drilling_mud:       '#5D4037',
-  cement:             '#9E9E9E',
-  completion_fluid:   '#1565C0',
-  spacer_fluid:       '#E65100',
-  displacement_fluid: '#00695C',
+  drilling_mud:              '#5D4037',
+  cement:                    '#9E9E9E',
+  completion_fluid:          '#1565C0',
+  completion_fluid_annulus:  '#1565C0',
+  completion_fluid_tubing:   '#0D47A1',
+  spacer_fluid:              '#E65100',
+  displacement_fluid:        '#00695C',
 }
 
 export const FLUID_COLORS_LIGHT: Record<string, string> = {

@@ -5,13 +5,9 @@ export type FluidType =
   | 'spacer_fluid'
   | 'displacement_fluid'
 
-export type SolverMethod = 'hybr' | 'lm' | 'broyden1'
 export type UnitSystem = 'metric' | 'imperial'
 
 export interface CalculationOptions {
-  solverMethod: SolverMethod
-  maxIterations: number
-  tolerance: number
   unitSystem: UnitSystem
 }
 
@@ -23,11 +19,24 @@ export interface WellConfig {
   fluidType: FluidType
 }
 
+export interface WellParameters {
+  tubingLengthM: number           // tubing length [m]
+  tubingOdMm: number              // tubing outer diameter [mm]
+  tubingWallMm: number            // tubing wall thickness [mm]
+  casingOdMm: number              // casing outer diameter [mm]
+  casingWallMm: number            // casing wall thickness [mm]
+  fluidDensityKgM3: number        // completion fluid density [kg/m³]
+  gravityMpS2: number             // gravitational acceleration [m/s²]
+  initialWaterLevelM: number      // initial fluid surface depth [m]
+  surfacePressurePa: number       // surface injection pressure [Pa]
+  maxWellheadPressurePa: number   // max wellhead back-pressure [Pa]
+  minWellheadPressurePa: number   // min wellhead back-pressure [Pa]
+}
+
 export interface CalculationRequest {
-  equations: string[]
-  initialParameters: number[]
   options: CalculationOptions
   wellConfig?: WellConfig
+  wellParams?: WellParameters
 }
 
 export interface CalculationResponse {
@@ -47,6 +56,12 @@ export interface ProgressEvent {
   convergenceMetric: number
   message: string
   currentFluidType: FluidType | null
+  // Well completion visualization fields
+  wellheadPressurePa: number
+  bottomPressurePa: number
+  volumePumpedM3: number
+  annulusFrontM: number
+  tubingFrontM: number
 }
 
 export interface VolumeRequirement {
@@ -92,7 +107,6 @@ export interface ServiceInfo {
   description: string
   supportedFluids: string[]
   unitSystems: string[]
-  solverMethods: string[]
   endpoints: {
     restApi: string
     websocket: string
@@ -102,6 +116,5 @@ export interface ServiceInfo {
   limits: {
     maxConcurrentCalculations: number
     calculationTimeoutSeconds: number
-    maxEquationsPerRequest: number
   }
 }

@@ -29,11 +29,18 @@ interface State {
   metadata: CalculationMetadata | null
   error: ErrorEvent | null
   apiError: string | null
+  // Well completion fields
+  annulusFrontM: number
+  tubingFrontM: number
+  tubingLengthM: number
+  wellheadPressurePa: number
+  bottomPressurePa: number
+  volumePumpedM3: number
 }
 
 type Action =
   | { type: 'SUBMITTING' }
-  | { type: 'STREAMING'; calculationId: string }
+  | { type: 'STREAMING'; calculationId: string; tubingLengthM: number }
   | { type: 'PROGRESS'; event: ProgressEvent }
   | { type: 'RESULT'; event: ResultEvent }
   | { type: 'ERROR'; event: ErrorEvent }
@@ -52,6 +59,12 @@ const initial: State = {
   metadata: null,
   error: null,
   apiError: null,
+  annulusFrontM: 0,
+  tubingFrontM: 0,
+  tubingLengthM: 0,
+  wellheadPressurePa: 0,
+  bottomPressurePa: 0,
+  volumePumpedM3: 0,
 }
 
 function reducer(state: State, action: Action): State {
@@ -59,7 +72,8 @@ function reducer(state: State, action: Action): State {
     case 'SUBMITTING':
       return { ...initial, status: 'submitting' }
     case 'STREAMING':
-      return { ...state, status: 'streaming', calculationId: action.calculationId }
+      return { ...state, status: 'streaming', calculationId: action.calculationId,
+               tubingLengthM: action.tubingLengthM }
     case 'PROGRESS':
       return {
         ...state,
@@ -68,6 +82,11 @@ function reducer(state: State, action: Action): State {
         phase: action.event.phase,
         iteration: action.event.iteration,
         convergenceMetric: action.event.convergenceMetric,
+        annulusFrontM: action.event.annulusFrontM ?? 0,
+        tubingFrontM: action.event.tubingFrontM ?? 0,
+        wellheadPressurePa: action.event.wellheadPressurePa ?? 0,
+        bottomPressurePa: action.event.bottomPressurePa ?? 0,
+        volumePumpedM3: action.event.volumePumpedM3 ?? 0,
       }
     case 'RESULT':
       return {
@@ -101,7 +120,8 @@ export function useCalculationSSE() {
     dispatch({ type: 'SUBMITTING' })
     try {
       const resp = await submitCalculation(req)
-      dispatch({ type: 'STREAMING', calculationId: resp.calculationId })
+      const tubingLengthM = req.wellParams?.tubingLengthM ?? 0
+      dispatch({ type: 'STREAMING', calculationId: resp.calculationId, tubingLengthM })
 
       const url = `${getBaseUrl()}/${resp.calculationId}/progress`
       const es = new EventSource(url)
