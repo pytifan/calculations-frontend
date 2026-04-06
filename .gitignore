@@ -13,8 +13,6 @@ dist-ssr
 *.local
 
 # Editor directories and files
-.vscode/*
-!.vscode/extensions.json
 .idea
 .DS_Store
 *.suo
@@ -22,3 +20,13 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+
+### VS Code ###
+.vscode/
+.vscode/*
+!.vscode/extensions.json
+
+### Claude Code ###
+.claude/
+CLAUDE.md
